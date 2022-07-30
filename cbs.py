@@ -12,17 +12,31 @@ def detect_collision(path1, path2):
     #           An edge collision occurs if the robots swap their location at the same timestep.
     #           You should use "get_location(path, t)" to get the location of a robot at time t.
 
-    pass
+    for i in range(max(len(path1), len(path2))):
+        a1_P, a1_next = get_location(path1, i), get_location(path1, i+1)
+        a2_P, a2_next = get_location(path2, i), get_location(path2, i+1) 
+        
+        if a1_P == a2_P:
+            return {'loc': [a1_P], 'timestep': i}
+        if a1_P == a2_next and a1_next == a2_P:
+            return {'loc': [a1_P, a2_P], 'timestep': i+1}
 
 
 def detect_collisions(paths):
     ##############################
     # Task 3.1: Return a list of first collisions between all robot pairs.
     #           A collision can be represented as dictionary that contains the id of the two robots, the vertex or edge
-    #           causing the collision, and the timestep at which the collision occurred.
+    #           causing the collision, and the timestep at which the collision ocPed.
     #           You should use your detect_collision function to find a collision between two robots.
 
-    pass
+    collisions = []
+    for a1 in range(len(paths)):
+        for a2 in range(a1+1, len(paths)):
+            collision = detect_collision(paths[a1], paths[a2])
+            if collision:
+                collisions.append({'a1': a1, 'a2': a2, 'loc': collision['loc'], 'timestep': collision['timestep']})
+    
+    return collisions
 
 
 def standard_splitting(collision):
@@ -35,7 +49,14 @@ def standard_splitting(collision):
     #                          specified timestep, and the second constraint prevents the second agent to traverse the
     #                          specified edge at the specified timestep
 
-    pass
+    if collision:
+        if len(collision['loc']) == 1:
+            return [({'agent': collision['a1'], 'loc': collision['loc'], 'timestep': collision['timestep']}),
+                    ({'agent': collision['a2'], 'loc': collision['loc'], 'timestep': collision['timestep']})]
+        else:
+            return [({'agent': collision['a1'], 'loc': [collision['loc'][0], collision['loc'][1]], 'timestep': collision['timestep']}),
+                    ({'agent': collision['a2'], 'loc': [collision['loc'][1], collision['loc'][0]], 'timestep': collision['timestep']})]
+
 
 
 def disjoint_splitting(collision):
@@ -49,8 +70,34 @@ def disjoint_splitting(collision):
     #                          specified edge at the specified timestep
     #           Choose the agent randomly
 
-    pass
+    if collision:
+        # if len(collision['loc']) == 2 and rand_a == 0:
+        #     return [({'agent': collision['a1'], 'loc': [collision['loc'][0], collision['loc'][1]], 'timestep': collision['timestep'], 'positive': False}),
+        #             ({'agent': collision['a1'], 'loc': [collision['loc'][0], collision['loc'][1]], 'timestep': collision['timestep'], 'positive': True})]
+        if len(collision['loc']) == 2 and random.randint(0, 1) == 1:
+            return [({'agent': collision['a2'], 'loc': [collision['loc'][1], collision['loc'][0]], 'timestep': collision['timestep'], 'positive': False}),
+                    ({'agent': collision['a2'], 'loc': [collision['loc'][1], collision['loc'][0]], 'timestep': collision['timestep'], 'positive': True})]
+        else:
+            return [({'agent': collision['a1'], 'loc': collision['loc'], 'timestep': collision['timestep'], 'positive': False}),
+                    ({'agent': collision['a1'], 'loc': collision['loc'], 'timestep': collision['timestep'], 'positive': True})]
 
+
+def paths_violate_constraint(constraint, paths):
+    assert constraint['positive'] is True
+    rst = []
+    for i in range(len(paths)):
+        if i == constraint['agent']:
+            continue
+        P = get_location(paths[i], constraint['timestep'])
+        prev = get_location(paths[i], constraint['timestep'] - 1)
+        if len(constraint['loc']) == 1:  # vertex constraint
+            if constraint['loc'][0] == P:
+                rst.append(i)
+        else:  # edge constraint
+            if constraint['loc'][0] == prev or constraint['loc'][1] == P \
+                    or constraint['loc'] == [P, prev]:
+                rst.append(i)
+    return rst
 
 class CBSSolver(object):
     """The high-level search of CBS."""
@@ -116,12 +163,12 @@ class CBSSolver(object):
         root['collisions'] = detect_collisions(root['paths'])
         self.push_node(root)
 
-        # Task 3.1: Testing
-        print(root['collisions'])
+        # # Task 3.1: Testing
+        # print(root['collisions'])
 
-        # Task 3.2: Testing
-        for collision in root['collisions']:
-            print(standard_splitting(collision))
+        # # Task 3.2: Testing
+        # for collision in root['collisions']:
+        #     print(standard_splitting(collision))
 
         ##############################
         # Task 3.3: High-Level Search
@@ -131,9 +178,57 @@ class CBSSolver(object):
         #             3. Otherwise, choose the first collision and convert to a list of constraints (using your
         #                standard_splitting function). Add a new child node to your open list for each constraint
         #           Ensure to create a copy of any objects that your child nodes might inherit
+        
+        while len(self.open_list) > 0:
+            P = self.pop_node()
+            
+            if len(P['collisions']) == 0:
+                self.print_results(P)
+                return P['paths']
+            
+            collision = P['collisions'][0]
+            if disjoint:
+                constraints = disjoint_splitting(collision)
+            else:
+                constraints = standard_splitting(collision)
+            for constraint in constraints:
+                Q = {'cost': 0,
+                    'constraints': [],
+                    'paths': [],
+                    'collisions': []}
+                if P['constraints']:
+                    Q['constraints'].extend(P['constraints'])
+                Q['constraints'].append(constraint)
+                if P['paths']:
+                    Q['paths'].extend(P['paths'])
 
-        self.print_results(root)
-        return root['paths']
+                if 'positive' in constraint and constraint['positive']:
+                    f_push = True
+                    for v in paths_violate_constraint(constraint, P['paths']):
+                        p = a_star(self.my_map, self.starts[v], self.goals[v], self.heuristics[v], v, Q['constraints'])
+                        if not p:
+                            f_push = False
+                            break
+                        Q['paths'][v] = p
+
+                    a = constraint['agent']
+                    path = a_star(self.my_map, self.starts[a], self.goals[a], self.heuristics[a], a, Q['constraints'])
+                    if f_push and path:
+                        Q['paths'][a] = path
+                        Q['collisions'] = detect_collisions(Q['paths'])
+                        Q['cost'] = get_sum_of_cost(Q['paths'])
+                        self.push_node(Q)
+
+                else:
+                    a = constraint['agent']
+                    path = a_star(self.my_map, self.starts[a], self.goals[a], self.heuristics[a], a, Q['constraints'])
+                    if path:
+                        Q['paths'][a] = path
+                        Q['collisions'] = detect_collisions(Q['paths'])
+                        Q['cost'] = get_sum_of_cost(Q['paths'])
+                        self.push_node(Q)
+
+        return 'No solution'
 
 
     def print_results(self, node):
