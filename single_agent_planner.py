@@ -60,7 +60,7 @@ def build_constraint_table(constraints, agent):
             if 'positive' not in constraint:
                 constraint['positive'] = False
 
-            if constraint['agent'] == agent:
+            if constraint['agent'] == agent and constraint['positive'] == False:
                 if constraint['timestep'] in constraint_table:
                     constraint_table[constraint['timestep']].append(constraint)
                 else:
@@ -100,18 +100,28 @@ def split_SI(timestep, SI):
                 SI.append((timestep+1, interval[1]))
 
 # example SI = [(0,2), (4,7), (9, inf)]
-def build_SI_table(constraint_table):
+def build_SI_table(constraint_table, agent):
     SI_table = {}
     for t in constraint_table:
-        constraint = constraint_table[t][0]
-        # print(constraint)
-        if constraint['positive'] == False and len(constraint['loc']) == 1:
-            loc = constraint['loc'][0]
-            if loc not in SI_table:
-                SI_table[loc] = [(0, float('inf'))]
-            # print(SI_table)
-            split_SI(constraint['timestep'], SI_table[loc])
-            # print(SI_table)
+        for constraint in constraint_table[t]:
+            # constraint = constraint_table[t][c]
+            # print(constraint_table[t])
+            # print(constraint)
+            if constraint['positive'] == False and len(constraint['loc']) == 1:
+                loc = constraint['loc'][0]
+                if loc not in SI_table:
+                    SI_table[loc] = [(0, float('inf'))]
+                # print(SI_table)
+                split_SI(t, SI_table[loc])
+                # print(SI_table)
+                # if len(constraint['loc']) == 2:
+                #     # if constraint[]
+                #     loc = constraint['loc'][1]
+                #     if loc not in SI_table:
+                #         SI_table[loc] = [(0, float('inf'))]
+                #     # print(SI_table)
+                #     split_SI(constraint['timestep']+1, SI_table[loc])
+                #     # print(SI_table)
     return SI_table
 
 
@@ -162,12 +172,13 @@ def is_constrained(curr_loc, next_loc, next_time, constraint_table):
 #         'timestep': curr['timestep']+1,
 #         'parent': curr}
 
-def push_node(open_list, node):
-    heapq.heappush(open_list, (node['g_val'] + node['h_val'], node['h_val'], node['g_val'], node['loc'], node['interval'], node['earliest_arrival'], node['timestep'], node))
+def push_node(open_list, node, n_count):
+    n_count += 1
+    heapq.heappush(open_list, (node['g_val'] + node['h_val'], node['g_val'], node['h_val'], node['wait'], node['timestep'], n_count, node))
 
 
 def pop_node(open_list):
-    _, _, _, _, _, _, _, curr = heapq.heappop(open_list)
+    _, _, _, _, _, _, curr = heapq.heappop(open_list)
     return curr
 
 
@@ -195,13 +206,20 @@ def a_star(my_map, start_loc, goal_loc, h_values, agent, constraints):
             if not col:
                 limit += 1
 
-    # print('\n======================= Agent', agent, '=======================')
     constraint_table = build_constraint_table(constraints, agent)
-    # print("constraint_table")
-    # print(constraint_table, '\n')
-    SI_table = build_SI_table(constraint_table)
+    SI_table = build_SI_table(constraint_table, agent)
+
+    # print('\n======================= Agent', agent, '=======================')
+    # if agent == 4:
+        # print("constraints")
+        # print(constraints, '\n')
+    print("constraint_table")
+    print(constraint_table, '\n')
     print("SI_table")
     print(SI_table)
+        # print(constraints)
+
+        # print(constraint_table[(3,4)])
 
     open_list = []
     closed_list = dict()
@@ -211,11 +229,16 @@ def a_star(my_map, start_loc, goal_loc, h_values, agent, constraints):
         earliest_goal_timestep = limit
     h_value = h_values[start_loc]
     try:
-        root = {'loc': start_loc, 'g_val': 0, 'h_val': h_value, 'parent': None, 'interval': SI_table[start_loc][0], 'earliest_arrival': 0,'timestep': 0}
+        root = {'loc': start_loc, 'g_val': 0, 'h_val': h_value, 'parent': None, 'interval': SI_table[start_loc][0], 'wait':0, 'earliest_arrival': 0,'timestep': 0}
     except:
-        root = {'loc': start_loc, 'g_val': 0, 'h_val': h_value, 'parent': None, 'interval': (0, 'inf'), 'earliest_arrival': 0,'timestep': 0}
+        root = {'loc': start_loc, 'g_val': 0, 'h_val': h_value, 'parent': None, 'interval': (0, 'inf'), 'wait':0, 'earliest_arrival': 0,'timestep': 0}
+    # print('root')
+    # print(root)
+    # print('root')
 
-    push_node(open_list, root)
+    n_count = 0
+    push_node(open_list, root, n_count)
+    n_count += 1
     closed_list[(root['loc'], root['interval'])] = root
 
     while len(open_list) > 0:
@@ -240,6 +263,8 @@ def a_star(my_map, start_loc, goal_loc, h_values, agent, constraints):
                 print('===================================================================================================================================================\n\n')
                 return get_path(curr)
             if curr['interval'][1] == float('inf'):
+                print('===================================================================================================================================================')
+                print(curr)
                 print('===================================================================================================================================================')
                 print('============================================================== FOUND PATH FOR', agent, '==============================================================')
                 print('===================================================================================================================================================\n\n')
@@ -283,35 +308,88 @@ def a_star(my_map, start_loc, goal_loc, h_values, agent, constraints):
                     # print(i)
                     # print(start_t, end_t)
                     continue
-
-                if is_constrained(curr['loc'], child_loc, curr['timestep'] + 1, constraint_table):
-                    continue
+                
+                f_push = True
                 t = max(i[0], start_t)
-                # if (child_loc, curr['timestep']+1) not in closed_list:
-                #     g = float('inf')
-                #     h = float('inf')
+                if is_constrained(curr['loc'], child_loc, t, constraint_table):
+                    continue
+                # for t_diff in range(start_t, t): 
+                #     if is_constrained(curr['loc'], curr['loc'], t_diff, constraint_table):
+                #         f_push = False
 
+                # if t != start_t:
+                #     f_push = False
+
+                # if f_push == False:
+                #     continue
+                
                 # child = {'loc': child_loc,
                 #         'interval': i,
                 #         'earliest_arrival': t,
-                #         'timestep': curr['timestep']+1,
-                #         'g_val': float('inf'),
-                #         'parent': curr}
-                # g = float('inf')
-                # if (child_loc, i) in closed_list:
-                #     g = closed_list[(child_loc, i)]['g_val']
-                
+                #         'timestep': start_t,
+                #         'wait': 0,
+                #         'parent': curr,
+                #         'g_val': curr['g_val']+1}
+                # successors.append(child)
+
                 child = {'loc': child_loc,
                         'interval': i,
                         'earliest_arrival': t,
-                        'timestep': curr['timestep']+1,
+                        'timestep': start_t,
+                        'wait': 0,
                         'parent': curr}
-                
 
-                successors.append(child)
+                if start_t < t:
+                    # if is_constrained(curr['loc'], curr['loc'], start_t, constraint_table):
+                    #     continue
+                    w = t - start_t
+                    # child['timestep'] += w
+                    wait_nodes = []
+
+                    first_wait = {'loc': curr['loc'],
+                                'interval': curr['interval'],
+                                'earliest_arrival': -1,
+                                'timestep': start_t,
+                                'wait': w,
+                                'parent': curr,
+                                'g_val': curr['g_val']+1}
+                    counter = 1
+                    while w > 1:
+                        # if is_constrained(curr['loc'], curr['loc'], curr['timestep']+w, constraint_table):
+                        #     f_push = False
+                        #     break
+                        temp = {'loc': curr['loc'],
+                                'interval': curr['interval'],
+                                'earliest_arrival': -1,
+                                'timestep': curr['timestep']+w,
+                                'wait': counter,
+                                'parent': None}
+                        counter += 1
+                        w -= 1
+                        wait_nodes.append(temp)
+                    wait_nodes.append(first_wait)
+
+                    # print(wait_nodes)
+                    for i in range(len(wait_nodes)-2, -1, -1):
+                        wait_nodes[i]['parent'] = wait_nodes[i+1]
+                        wait_nodes[i]['g_val'] = wait_nodes[i+1]['g_val']+1
+                    # print('=================================================================', curr['loc'], curr['interval'], curr['timestep'], '=================================================================')
+                    # print(wait_nodes)
+
+                    # if agent == 4:
+                    #     print('BLYAT------------------------------------------')
+                    #     print(wait_nodes)
+
+                    child['timestep'] = wait_nodes[0]['timestep']+1
+                    child['parent'] = wait_nodes[0]
+                    child['g_val'] = wait_nodes[0]['g_val']+1
+
+                if f_push == True:
+                    # print(child)
+                    successors.append(child)
 
         # print(successors)
-        print('=================================================================', curr['loc'], curr['interval'], curr['timestep'], '=================================================================')
+        # print('=================================================================', curr['loc'], curr['interval'], curr['timestep'], curr['g_val'], '=================================================================')
         for s in successors:
             # if s['loc'] == (2,3):
             #     print(s)
@@ -319,16 +397,19 @@ def a_star(my_map, start_loc, goal_loc, h_values, agent, constraints):
             if (s['loc'], s['interval']) in closed_list:
                 s['g_val'] = closed_list[(s['loc'], s['interval'])]['g_val']
 
-            print(s)
+            # print(s)
             if s['g_val'] > curr['g_val'] + 1:
                 s['g_val'] = curr['g_val'] + 1
                 s['h_val'] = h_values[s['loc']]
-                # s['timestep'] = s['timestep'] +1
-                # closed_list[(s['loc'], s['timestep'])] = s
-                print('===================================================\n', agent, 'PUSH \n===================================================')
-                print(s, '\n')
+                if s['timestep'] > s['g_val']:
+                    s['g_val'] = s['timestep']
+                # s['earliest_arrival'] = s['timestep']
+                # if agent == 4:
+                #     print('===================================================\n', agent, 'PUSH \n===================================================')
+                #     print(s, '\n')
                 closed_list[(s['loc'], s['interval'])] = s
-                push_node(open_list, s)
+                push_node(open_list, s, n_count)
+                n_count += 1
                 # if (s['loc'], s['interval']) in closed_list:
                 #     existing_node = closed_list[(s['loc'], s['interval'])]
                 #     if compare_nodes(s, existing_node):
@@ -338,7 +419,7 @@ def a_star(my_map, start_loc, goal_loc, h_values, agent, constraints):
                 #     closed_list[(s['loc'], s['interval'])] = s
                 #     push_node(open_list, s)
             else:
-                print('\n')
+                pass
 
 
     return None  # Failed to find solutions
