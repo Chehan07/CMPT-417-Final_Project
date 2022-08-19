@@ -180,6 +180,7 @@ class CBSSolver(object):
         #           Ensure to create a copy of any objects that your child nodes might inherit
         
         while len(self.open_list) > 0:
+            # print(self.open_list)
             P = self.pop_node()
             
             if len(P['collisions']) == 0:
