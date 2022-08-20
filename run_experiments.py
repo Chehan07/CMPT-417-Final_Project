@@ -1,15 +1,23 @@
-#!/usr/bin/python
+# Libraries
 import argparse
 import glob
 from pathlib import Path
-from cbs import CBSSolver
-# from independent import IndependentSolver
-from prioritized import PrioritizedPlanningSolver
 from visualize import Animation
+
 from single_agent_planner import get_sum_of_cost
+from independent import IndependentSolver
+from prioritized import PrioritizedPlanningSolver
+from cbs import CBSSolver
 
-SOLVER = "CBS"
 
+# Arguments
+SOLVER_INDEPENDENT_ARGUMENT = 'Independent'
+SOLVER_PRIORITIZED_ARGUMENT = 'Prioritized'
+SOLVER_CBS_ARGUMENT = 'CBS'
+SOLVER_CBS_SIPP_ARGUMENT = 'CBS_SIPP'
+
+
+# Print the start and goal locations
 def print_mapf_instance(my_map, starts, goals):
     print('Start locations')
     print_locations(my_map, starts)
@@ -17,6 +25,7 @@ def print_mapf_instance(my_map, starts, goals):
     print_locations(my_map, goals)
 
 
+# Print the locations
 def print_locations(my_map, locations):
     starts_map = [[-1 for _ in range(len(my_map[0]))] for _ in range(len(my_map))]
     for i in range(len(locations)):
@@ -34,6 +43,7 @@ def print_locations(my_map, locations):
     print(to_print)
 
 
+# Load a map instance from a text file
 def import_mapf_instance(filename):
     f = Path(filename)
     if not f.is_file():
@@ -69,7 +79,9 @@ def import_mapf_instance(filename):
     return my_map, starts, goals
 
 
+# Main function
 if __name__ == '__main__':
+    # Set the arguments
     parser = argparse.ArgumentParser(description='Runs various MAPF algorithms')
     parser.add_argument('--instance', type=str, default=None,
                         help='The name of the instance file(s)')
@@ -77,42 +89,54 @@ if __name__ == '__main__':
                         help='Use batch output instead of animation')
     parser.add_argument('--disjoint', action='store_true', default=False,
                         help='Use the disjoint splitting')
-    parser.add_argument('--solver', type=str, default=SOLVER,
-                        help='The solver to use (one of: {CBS,Independent,Prioritized}), defaults to ' + str(SOLVER))
-
+    parser.add_argument('--solver', type=str, default=SOLVER_CBS_SIPP_ARGUMENT,
+                        help='The solver to use (one of: {CBS_SIPP, CBS, Independent, Prioritized}), defaults to ' + str(SOLVER_CBS_SIPP_ARGUMENT))
     args = parser.parse_args()
 
-
+    # Open the csv file
     result_file = open("results.csv", "w", buffering=1)
 
+    # Loop for accessing each instance
     for file in sorted(glob.glob(args.instance)):
 
         print("***Import an instance***")
         my_map, starts, goals = import_mapf_instance(file)
         print_mapf_instance(my_map, starts, goals)
 
-        if args.solver == "CBS":
+        # Execute CBS SIPP solver
+        if args.solver == SOLVER_CBS_SIPP_ARGUMENT:
+            print("***Run CBS with SIPP***")
+            cbs = CBSSolver(my_map, starts, goals)
+            paths = cbs.find_solution(args.disjoint, True)
+        # Execute CBS solver
+        elif args.solver == SOLVER_CBS_ARGUMENT:
             print("***Run CBS***")
             cbs = CBSSolver(my_map, starts, goals)
-            paths = cbs.find_solution(args.disjoint)
-        # elif args.solver == "Independent":
-        #     print("***Run Independent***")
-        #     solver = IndependentSolver(my_map, starts, goals)
-        #     paths = solver.find_solution()
-        elif args.solver == "Prioritized":
+            paths = cbs.find_solution(args.disjoint, False)
+        # Execute prioritized solver
+        elif args.solver == SOLVER_PRIORITIZED_ARGUMENT:
             print("***Run Prioritized***")
             solver = PrioritizedPlanningSolver(my_map, starts, goals)
             paths = solver.find_solution()
+        # Execute independent solver
+        elif args.solver == SOLVER_INDEPENDENT_ARGUMENT:
+            print("***Run Independent***")
+            solver = IndependentSolver(my_map, starts, goals)
+            paths = solver.find_solution()
+        # Unknown solver
         else:
             raise RuntimeError("Unknown solver!")
 
+        # Write the csv file
         cost = get_sum_of_cost(paths)
         result_file.write("{},{}\n".format(file, cost))
 
-
+        # Show the animation
         if not args.batch:
             print("***Test paths on a simulation***")
             animation = Animation(my_map, starts, goals, paths)
             # animation.save("output.mp4", 1.0)
             animation.show()
+
+    # Close the csv file
     result_file.close()

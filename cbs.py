@@ -2,6 +2,7 @@ import time as timer
 import heapq
 import random
 from single_agent_planner import compute_heuristics, a_star, get_location, get_sum_of_cost
+from single_agent_planner_sipp import a_star_sipp
 
 
 def detect_collision(path1, path2):
@@ -58,7 +59,6 @@ def standard_splitting(collision):
                     ({'agent': collision['a2'], 'loc': [collision['loc'][1], collision['loc'][0]], 'timestep': collision['timestep']})]
 
 
-
 def disjoint_splitting(collision):
     ##############################
     # Task 4.1: Return a list of (two) constraints to resolve the given collision
@@ -99,8 +99,17 @@ def paths_violate_constraint(constraint, paths):
                 rst.append(i)
     return rst
 
+
+def get_the_path(my_map, start_loc, goal_loc, h_values, agent, constraints, sipp):
+    if sipp:
+        return a_star_sipp(my_map, start_loc, goal_loc, h_values, agent, constraints)
+    else:
+        return a_star(my_map, start_loc, goal_loc, h_values, agent, constraints)
+
+
 class CBSSolver(object):
     """The high-level search of CBS."""
+
 
     def __init__(self, my_map, starts, goals):
         """my_map   - list of lists specifying obstacle positions
@@ -124,10 +133,12 @@ class CBSSolver(object):
         for goal in self.goals:
             self.heuristics.append(compute_heuristics(my_map, goal))
 
+
     def push_node(self, node):
         heapq.heappush(self.open_list, (node['cost'], len(node['collisions']), self.num_of_generated, node))
         print("Generate node {}".format(self.num_of_generated))
         self.num_of_generated += 1
+
 
     def pop_node(self):
         _, _, id, node = heapq.heappop(self.open_list)
@@ -135,7 +146,8 @@ class CBSSolver(object):
         self.num_of_expanded += 1
         return node
 
-    def find_solution(self, disjoint=True):
+
+    def find_solution(self, disjoint=True, sipp=True):
         """ Finds paths for all agents from their start locations to their goal locations
 
         disjoint    - use disjoint splitting or not
@@ -153,8 +165,7 @@ class CBSSolver(object):
                 'paths': [],
                 'collisions': []}
         for i in range(self.num_of_agents):  # Find initial path for each agent
-            path = a_star(self.my_map, self.starts[i], self.goals[i], self.heuristics[i],
-                          i, root['constraints'])
+            path = get_the_path(self.my_map, self.starts[i], self.goals[i], self.heuristics[i], i, root['constraints'], sipp)
             if path is None:
                 raise BaseException('No solutions')
             root['paths'].append(path)
@@ -206,14 +217,14 @@ class CBSSolver(object):
                 if 'positive' in constraint and constraint['positive']:
                     f_push = True
                     for v in paths_violate_constraint(constraint, P['paths']):
-                        p = a_star(self.my_map, self.starts[v], self.goals[v], self.heuristics[v], v, Q['constraints'])
+                        p = get_the_path(self.my_map, self.starts[v], self.goals[v], self.heuristics[v], v, Q['constraints'], sipp)
                         if not p:
                             f_push = False
                             break
                         Q['paths'][v] = p
 
                     a = constraint['agent']
-                    path = a_star(self.my_map, self.starts[a], self.goals[a], self.heuristics[a], a, Q['constraints'])
+                    path = get_the_path(self.my_map, self.starts[a], self.goals[a], self.heuristics[a], a, Q['constraints'], sipp)
                     if f_push and path:
                         Q['paths'][a] = path
                         Q['collisions'] = detect_collisions(Q['paths'])
@@ -222,7 +233,7 @@ class CBSSolver(object):
 
                 else:
                     a = constraint['agent']
-                    path = a_star(self.my_map, self.starts[a], self.goals[a], self.heuristics[a], a, Q['constraints'])
+                    path = get_the_path(self.my_map, self.starts[a], self.goals[a], self.heuristics[a], a, Q['constraints'], sipp)
                     if path:
                         Q['paths'][a] = path
                         Q['collisions'] = detect_collisions(Q['paths'])
