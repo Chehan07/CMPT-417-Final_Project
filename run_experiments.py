@@ -17,6 +17,14 @@ SOLVER_CBS_ARGUMENT = 'CBS'
 SOLVER_CBS_SIPP_ARGUMENT = 'CBS_SIPP'
 
 
+# Files
+RESULTS_DIRECTORY_NAME = 'results\\'
+CBS_RESULT_FILE_NAME = 'cbs_result.csv'
+CBS_DISJOINT_RESULT_FILE_NAME = 'cbs_disjoint_result.csv'
+CBS_SIPP_RESULT_FILE_NAME = 'cbs_sipp_result.csv'
+CBS_SIPP_DISJOINT_RESULT_FILE_NAME = 'cbs_sipp_disjoint_result.csv'
+
+
 # Print the start and goal locations
 def print_mapf_instance(my_map, starts, goals):
     print('Start locations')
@@ -94,7 +102,16 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # Open the csv file
-    result_file = open("results.csv", "w", buffering=1)
+    if args.solver == SOLVER_CBS_SIPP_ARGUMENT:
+        if args.disjoint:
+            result_file = open(RESULTS_DIRECTORY_NAME + CBS_SIPP_DISJOINT_RESULT_FILE_NAME, "w", buffering=1)
+        else:
+            result_file = open(RESULTS_DIRECTORY_NAME + CBS_SIPP_RESULT_FILE_NAME, "w", buffering=1)
+    elif args.solver == SOLVER_CBS_ARGUMENT:
+        if args.disjoint:
+            result_file = open(RESULTS_DIRECTORY_NAME + CBS_DISJOINT_RESULT_FILE_NAME, "w", buffering=1)
+        else:
+            result_file = open(RESULTS_DIRECTORY_NAME + CBS_RESULT_FILE_NAME, "w", buffering=1)
 
     # Loop for accessing each instance
     for file in sorted(glob.glob(args.instance)):
@@ -107,29 +124,33 @@ if __name__ == '__main__':
         if args.solver == SOLVER_CBS_SIPP_ARGUMENT:
             print("***Run CBS with SIPP***")
             cbs = CBSSolver(my_map, starts, goals)
-            paths = cbs.find_solution(args.disjoint, True)
+            paths, num_of_generated, num_of_expanded, CPU_time = cbs.find_solution(args.disjoint, True)
+            cost = get_sum_of_cost(paths)
+            result_file.write("{},{},{},{},{}\n".format(file, num_of_generated, num_of_expanded, cost, CPU_time))
+
         # Execute CBS solver
         elif args.solver == SOLVER_CBS_ARGUMENT:
             print("***Run CBS***")
             cbs = CBSSolver(my_map, starts, goals)
-            paths = cbs.find_solution(args.disjoint, False)
+            paths, num_of_generated, num_of_expanded, CPU_time = cbs.find_solution(args.disjoint, False)
+            cost = get_sum_of_cost(paths)
+            result_file.write("{},{},{},{},{}\n".format(file, num_of_generated, num_of_expanded, cost, CPU_time))
+
         # Execute prioritized solver
         elif args.solver == SOLVER_PRIORITIZED_ARGUMENT:
             print("***Run Prioritized***")
             solver = PrioritizedPlanningSolver(my_map, starts, goals)
             paths = solver.find_solution()
+
         # Execute independent solver
         elif args.solver == SOLVER_INDEPENDENT_ARGUMENT:
             print("***Run Independent***")
             solver = IndependentSolver(my_map, starts, goals)
             paths = solver.find_solution()
+
         # Unknown solver
         else:
             raise RuntimeError("Unknown solver!")
-
-        # Write the csv file
-        cost = get_sum_of_cost(paths)
-        result_file.write("{},{}\n".format(file, cost))
 
         # Show the animation
         if not args.batch:
@@ -138,5 +159,6 @@ if __name__ == '__main__':
             # animation.save("output.mp4", 1.0)
             animation.show()
 
-    # Close the csv file
-    result_file.close()
+    # Close the csv files
+    if args.solver == SOLVER_CBS_SIPP_ARGUMENT or args.solver == SOLVER_CBS_ARGUMENT:
+        result_file.close()
